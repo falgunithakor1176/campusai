@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <!-- Primary Meta Tags -->
+    <title>CampusAI - Intelligent College Assistant</title>
+    <meta name="title" content="CampusAI - Intelligent College Assistant" />
+    <meta
+      name="description"
+      content="Get instant, AI-powered answers about fees, courses, faculty, events, and more. Your intelligent college companion powered by Google Gemini AI."
+    />
+    <meta name="keywords" content="college AI, campus assistant, student help, AI chatbot, college information" />
+    <meta name="author" content="CampusAI" />
+    <meta name="theme-color" content="#6C63FF" />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://campusai.edu/" />
+    <meta property="og:title" content="CampusAI - Intelligent College Assistant" />
+    <meta
+      property="og:description"
+      content="Get instant, AI-powered answers about fees, courses, faculty, events, and more."
+    />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:site_name" content="CampusAI" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://campusai.edu/" />
+    <meta property="twitter:title" content="CampusAI - Intelligent College Assistant" />
+    <meta
+      property="twitter:description"
+      content="Get instant, AI-powered answers about fees, courses, faculty, events, and more."
+    />
+    <meta property="twitter:image" content="/og-image.png" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Inline critical CSS to prevent flash of unstyled content -->
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        background: #0f1117;
+        color: #f0f0f5;
+        margin: 0;
+        padding: 0;
+        font-family: 'Inter', system-ui, sans-serif;
+      }
+      #root {
+        min-height: 100vh;
+      }
+      /* Initial loading screen */
+      #app-loader {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0f1117;
+        z-index: 9999;
+        transition: opacity 0.3s ease;
+      }
+      #app-loader.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .loader-ring {
+        width: 48px;
+        height: 48px;
+        border: 3px solid rgba(108, 99, 255, 0.2);
+        border-top-color: #6c63ff;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Initial app loader (removed by React after mount) -->
+    <div id="app-loader" aria-label="Loading CampusAI" aria-live="polite">
+      <div class="loader-ring"></div>
+    </div>
+
+    <!-- React app root -->
+    <div id="root"></div>
+
+    <!-- Entry point -->
+    <script type="module" src="/src/main.jsx"></script>
+
+    <!-- Remove loader once React hydrates -->
+    <script>
+      window.addEventListener('DOMContentLoaded', () => {
+        // Loader will be hidden by React's useEffect after mount
+        setTimeout(() => {
+          const loader = document.getElementById('app-loader');
+          if (loader) loader.classList.add('hidden');
+        }, 800);
+      });
+    </script>
+  </body>
+</html>

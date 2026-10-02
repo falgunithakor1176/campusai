@@ -1,0 +1,1044 @@
+// ============================================================
+// CampusAI - Complete Prisma Schema
+// Multi-tenant SaaS architecture with college_id on all major entities
+// pgvector for semantic search, full relational integrity
+// ============================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector", schema: "public")]
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  FACULTY
+  STUDENT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum NoticeCategory {
+  ACADEMIC
+  EXAM
+  EVENT
+  HOSTEL
+  GENERAL
+  URGENT
+  PLACEMENT
+  SCHOLARSHIP
+}
+
+enum NoticeAudience {
+  ALL
+  STUDENT
+  FACULTY
+  ADMIN
+}
+
+enum CourseType {
+  CORE
+  ELECTIVE
+  LAB
+  PROJECT
+  SEMINAR
+}
+
+enum HostelType {
+  BOYS
+  GIRLS
+  MIXED
+}
+
+enum PlacementCategory {
+  ON_CAMPUS
+  OFF_CAMPUS
+  INTERNSHIP
+}
+
+enum DocumentStatus {
+  UPLOADING
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+  ARCHIVED
+}
+
+enum DocumentCategory {
+  ADMISSION
+  ACADEMICS
+  EXAMINATION
+  LIBRARY
+  HOSTEL
+  FEES
+  PLACEMENT
+  SCHOLARSHIP
+  TRANSPORTATION
+  LABORATORY
+  POLICIES
+  STUDENT_HANDBOOK
+  FACULTY_HANDBOOK
+  RESEARCH
+  EVENTS
+  NOTICES
+  OTHER
+}
+
+enum DocumentVisibility {
+  PUBLIC
+  STUDENTS
+  FACULTY
+  ADMIN
+  PRIVATE
+}
+
+enum EmbeddingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+}
+
+enum FeedbackType {
+  POSITIVE
+  NEGATIVE
+  NONE
+}
+
+enum FaqCategory {
+  ADMISSION
+  FEES
+  ACADEMICS
+  EXAMINATION
+  HOSTEL
+  LIBRARY
+  PLACEMENT
+  SCHOLARSHIPS
+  FACILITIES
+  GENERAL
+  CLUBS
+  SPORTS
+}
+
+// ============================================================
+// COLLEGES (Multi-college SaaS foundation)
+// ============================================================
+
+model College {
+  id              String   @id @default(uuid())
+  name            String
+  slug            String   @unique
+  shortName       String?
+  logoUrl         String?
+  address         String?
+  city            String?
+  state           String?
+  pincode         String?
+  phone           String?
+  email           String?
+  website         String?
+  establishedYear Int?
+  affiliatedTo    String?
+  accreditation   String?
+  naacGrade       String?
+  totalStudents   Int?
+  totalFaculty    Int?
+  campusAreaAcres Float?
+  settings        Json     @default("{}")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users              User[]
+  departments        Department[]
+  notices            Notice[]
+  events             Event[]
+  scholarships       Scholarship[]
+  documents          Document[]
+  libraryInfo        LibraryInfo[]
+  hostelInfo         HostelInfo[]
+  faqs               Faq[]
+  clubs              Club[]
+  facilities         Facility[]
+  academicCalendars  AcademicCalendar[]
+  campusRules        CampusRule[]
+
+  @@map("colleges")
+}
+
+// ============================================================
+// USERS
+// ============================================================
+
+model User {
+  id            String      @id @default(uuid())
+  collegeId     String?
+  role          UserRole    @default(STUDENT)
+  email         String      @unique
+  passwordHash  String
+  name          String
+  avatar        String?
+  phone         String?
+  emailVerified Boolean     @default(false)
+  status        UserStatus  @default(ACTIVE)
+  lastLogin     DateTime?
+  deletedAt     DateTime?
+  
+  // Extensibility fields for verification, password resets & MFA
+  verificationToken String?
+  resetToken        String?
+  resetTokenExpires DateTime?
+  mfaEnabled        Boolean     @default(false)
+  mfaSecret         String?
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  college          College?          @relation(fields: [collegeId], references: [id])
+  student          Student?
+  faculty          Faculty?
+  chatSessions     ChatSession[]
+  publishedNotices Notice[]          @relation("NoticePublisher")
+  documents        Document[]
+  refreshTokens    RefreshToken[]
+  placementRecords PlacementRecord[]
+  documentVersions DocumentVersion[] @relation("DocumentVersionUploader")
+  documentAuditLogs DocumentAuditLog[] @relation("DocumentAuditUser")
+
+  @@index([email])
+  @@index([collegeId])
+  @@index([role])
+  @@map("users")
+}
+
+model Student {
+  id              String      @id @default(uuid())
+  userId          String      @unique
+  departmentId    String?
+  rollNumber      String?     @unique
+  admissionYear   Int?
+  currentSemester Int?
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department      Department? @relation(fields: [departmentId], references: [id])
+
+  @@index([departmentId])
+  @@index([rollNumber])
+  @@map("students")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ============================================================
+// DEPARTMENTS
+// ============================================================
+
+model Department {
+  id              String   @id @default(uuid())
+  collegeId       String
+  name            String
+  code            String
+  description     String?
+  hodFacultyId    String?  @unique
+  logoUrl         String?
+  establishedYear Int?
+  totalSeats      Int?
+  durationYears   Int      @default(4)
+  degreeOffered   String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  college            College            @relation(fields: [collegeId], references: [id])
+  hod                Faculty?           @relation("DeptHOD", fields: [hodFacultyId], references: [id])
+  faculty            Faculty[]          @relation("DeptFaculty")
+  courses            Course[]
+  subjects           Subject[]
+  feeStructures      FeeStructure[]
+  placementStats     PlacementStat[]
+  placementRecords   PlacementRecord[]
+  examTimetables     ExamTimetable[]
+  attendancePolicies AttendancePolicy[]
+  students           Student[]
+  laboratories       Laboratory[]
+
+  @@unique([collegeId, code])
+  @@index([collegeId])
+  @@map("departments")
+}
+
+// ============================================================
+// FACULTY
+// ============================================================
+
+model Faculty {
+  id              String   @id @default(uuid())
+  userId          String?  @unique
+  departmentId    String
+  name            String
+  designation     String?
+  qualification   String?
+  email           String?
+  phone           String?
+  photoUrl        String?
+  specialization  String?
+  experienceYears Int?
+  publications    Int?
+  researchAreas   String?
+  linkedinUrl     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User?       @relation(fields: [userId], references: [id])
+  department      Department  @relation("DeptFaculty", fields: [departmentId], references: [id])
+  hodOfDepartment Department? @relation("DeptHOD")
+
+  @@index([departmentId])
+  @@map("faculty")
+}
+
+// ============================================================
+// COURSES (Program-level, e.g., B.E. Computer Engineering)
+// ============================================================
+
+model Course {
+  id           String     @id @default(uuid())
+  departmentId String
+  name         String
+  code         String     @unique
+  semester     Int
+  credits      Int        @default(3)
+  type         CourseType @default(CORE)
+  description  String?
+  objectives   String?
+  outcomes     String?
+  prerequisite String?
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  @@index([departmentId])
+  @@index([semester])
+  @@map("courses")
+}
+
+// ============================================================
+// SUBJECTS (Detailed subject under a course/semester)
+// ============================================================
+
+model Subject {
+  id           String   @id @default(uuid())
+  departmentId String
+  name         String
+  code         String   @unique
+  semester     Int
+  credits      Int      @default(3)
+  isLab        Boolean  @default(false)
+  theoryMarks  Int?
+  practicalMarks Int?
+  internalMarks  Int?
+  description  String?
+  syllabus     String?
+  textbooks    String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department   Department @relation(fields: [departmentId], references: [id])
+  examTimetables ExamTimetable[]
+
+  @@index([departmentId])
+  @@index([semester])
+  @@map("subjects")
+}
+
+// ============================================================
+// FEE STRUCTURES
+// ============================================================
+
+model FeeStructure {
+  id            String   @id @default(uuid())
+  departmentId  String
+  academicYear  String
+  yearOfStudy   Int
+  tuitionFee    Decimal  @db.Decimal(10, 2)
+  examFee       Decimal  @db.Decimal(10, 2) @default(0)
+  labFee        Decimal  @db.Decimal(10, 2) @default(0)
+  hostelFee     Decimal  @db.Decimal(10, 2) @default(0)
+  transportFee  Decimal  @db.Decimal(10, 2) @default(0)
+  libraryFee    Decimal  @db.Decimal(10, 2) @default(0)
+  developmentFee Decimal @db.Decimal(10, 2) @default(0)
+  otherFee      Decimal  @db.Decimal(10, 2) @default(0)
+  totalFee      Decimal  @db.Decimal(10, 2)
+  dueDate1      DateTime?
+  dueDate2      DateTime?
+  lateFine      Decimal? @db.Decimal(10, 2)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  department    Department @relation(fields: [departmentId], references: [id])
+
+  @@unique([departmentId, academicYear, yearOfStudy])
+  @@index([departmentId])
+  @@map("fee_structures")
+}
+
+// ============================================================
+// NOTICES
+// ============================================================
+
+model Notice {
+  id              String          @id @default(uuid())
+  collegeId       String
+  title           String
+  content         String
+  category        NoticeCategory  @default(GENERAL)
+  targetAudience  NoticeAudience  @default(ALL)
+  publishedById   String?
+  isPublished     Boolean         @default(false)
+  publishDate     DateTime?
+  expiryDate      DateTime?
+  attachmentUrl   String?
+  isPinned        Boolean         @default(false)
+  viewCount       Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  college         College  @relation(fields: [collegeId], references: [id])
+  publishedBy     User?    @relation("NoticePublisher", fields: [publishedById], references: [id])
+
+  @@index([collegeId])
+  @@index([isPublished])
+  @@index([targetAudience])
+  @@index([isPinned])
+  @@map("notices")
+}
+
+// ============================================================
+// EVENTS
+// ============================================================
+
+model Event {
+  id               String   @id @default(uuid())
+  collegeId        String
+  title            String
+  description      String?
+  eventDate        DateTime
+  endDate          DateTime?
+  venue            String?
+  category         String?
+  imageUrl         String?
+  registrationLink String?
+  maxParticipants  Int?
+  organizer        String?
+  contactEmail     String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  college          College  @relation(fields: [collegeId], references: [id])
+
+  @@index([collegeId])
+  @@index([eventDate])
+  @@map("events")
+}
+
+// ============================================================
+// SCHOLARSHIPS
+// ============================================================
+
+model Scholarship {
+  id               String   @id @default(uuid())
+  collegeId        String
+  name             String
+  description      String?
+  eligibility      String?
+  minimumPercentage Float?
+  amount           Decimal? @db.Decimal(10, 2)
+  fundingSource    String?
+  deadline         DateTime?
+  applicationLink  String?
+  documentsRequired String?
+  selectionProcess String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  college          College  @relation(fields: [collegeId], references: [id])
+
+  @@index([collegeId])
+  @@map("scholarships")
+}
+
+// ============================================================
+// PLACEMENT COMPANIES
+// ============================================================
+
+model PlacementCompany {
+  id              String   @id @default(uuid())
+  name            String
+  logoUrl         String?
+  industry        String?
+  website         String?
+  description     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  placementStats   PlacementStat[]
+  placementRecords PlacementRecord[]
+
+  @@map("placement_companies")
+}
+
+// ============================================================
+// PLACEMENT STATISTICS (Aggregate)
+// ============================================================
+
+model PlacementStat {
+  id              String            @id @default(uuid())
+  departmentId    String?
+  companyId       String?
+  academicYear    String
+  companyName     String
+  packageLpa      Decimal           @db.Decimal(5, 2)
+  highestPackage  Decimal?          @db.Decimal(5, 2)
+  studentsPlaced  Int               @default(1)
+  category        PlacementCategory @default(ON_CAMPUS)
+  roleOffered     String?
+  location        String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  department      Department?       @relation(fields: [departmentId], references: [id])
+  company         PlacementCompany? @relation(fields: [companyId], references: [id])
+
+  @@index([departmentId])
+  @@index([academicYear])
+  @@map("placement_stats")
+}
+
+// ============================================================
+// PLACEMENT RECORDS (Individual student placements)
+// ============================================================
+
+model PlacementRecord {
+  id           String            @id @default(uuid())
+  userId       String?
+  departmentId String?
+  companyId    String?
+  companyName  String
+  packageLpa   Decimal           @db.Decimal(5, 2)
+  roleOffered  String?
+  location     String?
+  category     PlacementCategory @default(ON_CAMPUS)
+  academicYear String
+  placedOn     DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  user         User?             @relation(fields: [userId], references: [id])
+  department   Department?       @relation(fields: [departmentId], references: [id])
+  company      PlacementCompany? @relation(fields: [companyId], references: [id])
+
+  @@index([userId])
+  @@index([departmentId])
+  @@index([academicYear])
+  @@map("placement_records")
+}
+
+// ============================================================
+// EXAM TIMETABLES
+// ============================================================
+
+model ExamTimetable {
+  id            String   @id @default(uuid())
+  departmentId  String
+  subjectId     String?
+  semester      Int
+  subjectName   String
+  subjectCode   String?
+  examDate      DateTime
+  examTime      String
+  durationHours Decimal  @db.Decimal(3, 1) @default(3)
+  roomNumber    String?
+  invigilator   String?
+  academicYear  String
+  examType      String   @default("End Semester")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  department    Department @relation(fields: [departmentId], references: [id])
+  subject       Subject?   @relation(fields: [subjectId], references: [id])
+
+  @@index([departmentId])
+  @@index([academicYear])
+  @@map("exam_timetables")
+}
+
+// ============================================================
+// ATTENDANCE POLICIES
+// ============================================================
+
+model AttendancePolicy {
+  id                String   @id @default(uuid())
+  departmentId      String?
+  minimumPercentage Int      @default(75)
+  policyText        String?
+  consequences      String?
+  exemptions        String?
+  medicalLeaveRules String?
+  academicYear      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  department        Department? @relation(fields: [departmentId], references: [id])
+
+  @@index([departmentId])
+  @@map("attendance_policies")
+}
+
+// ============================================================
+// LIBRARY INFO
+// ============================================================
+
+model LibraryInfo {
+  id               String   @id @default(uuid())
+  collegeId        String
+  openingTime      String
+  closingTime      String
+  workingDays      String
+  rules            String?
+  totalBooks       Int?
+  totalJournals    Int?
+  totalEBooks      Int?
+  digitalResources String?
+  membershipFee    Decimal? @db.Decimal(8, 2)
+  finePerDayLate   Decimal? @db.Decimal(5, 2)
+  contactEmail     String?
+  contactPhone     String?
+  location         String?
+  updatedAt        DateTime @updatedAt
+
+  college          College  @relation(fields: [collegeId], references: [id])
+
+  @@index([collegeId])
+  @@map("library_info")
+}
+
+// ============================================================
+// HOSTEL INFO
+// ============================================================
+
+model HostelInfo {
+  id             String     @id @default(uuid())
+  collegeId      String
+  name           String
+  type           HostelType
+  capacity       Int?
+  occupancy      Int?
+  wardenName     String?
+  wardenContact  String?
+  wardenEmail    String?
+  rules          String?
+  facilities     String?
+  messMenu       String?
+  feePerYear     Decimal?   @db.Decimal(10, 2)
+  messFeePerYear Decimal?   @db.Decimal(10, 2)
+  location       String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  college        College    @relation(fields: [collegeId], references: [id])
+
+  @@index([collegeId])
+  @@map("hostel_info")
+}
+
+// ============================================================
+// ACADEMIC CALENDAR
+// ============================================================
+
+model AcademicCalendar {
+  id           String   @id @default(uuid())
+  collegeId    String
+  academicYear String
+  semester     Int?
+  title        String
+  description  String?
+  startDate    DateTime
+  endDate      DateTime?
+  category     String?
+  isHoliday    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  college      College  @relation(fields: [collegeId], references: [id])
+
+  @@index([collegeId])
+  @@index([academicYear])
+  @@map("academic_calendar")
+}
+
+// ============================================================
+// LABORATORIES
+// ============================================================
+
+model Laboratory {
+  id           String   @id @default(uuid())
+  departmentId String
+  name         String
+  roomNumber   String?
+  capacity     Int?
+  equipment    String?
+  software     String?
+  inCharge     String?
+  timings      String?
+  description  String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  @@index([departmentId])
+  @@map("laboratories")
+}
+
+// ============================================================
+// CAMPUS FACILITIES
+// ============================================================
+
+model Facility {
+  id          String   @id @default(uuid())
+  collegeId   String
+  name        String
+  category    String?
+  description String?
+  location    String?
+  capacity    Int?
+  timings     String?
+  contactInfo String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  college     College  @relation(fields: [collegeId], references: [id])
+
+  @@index([collegeId])
+  @@map("facilities")
+}
+
+// ============================================================
+// CLUBS & STUDENT ORGANIZATIONS
+// ============================================================
+
+model Club {
+  id           String   @id @default(uuid())
+  collegeId    String
+  name         String
+  category     String?
+  description  String?
+  facultyAdvisor String?
+  presidentName  String?
+  contactEmail   String?
+  meetingDay     String?
+  meetingTime    String?
+  achievements   String?
+  imageUrl       String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  college      College  @relation(fields: [collegeId], references: [id])
+
+  @@index([collegeId])
+  @@map("clubs")
+}
+
+// ============================================================
+// CAMPUS RULES & REGULATIONS
+// ============================================================
+
+model CampusRule {
+  id          String   @id @default(uuid())
+  collegeId   String
+  title       String
+  category    String?
+  content     String
+  severity    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  college     College  @relation(fields: [collegeId], references: [id])
+
+  @@index([collegeId])
+  @@map("campus_rules")
+}
+
+// ============================================================
+// FAQs (Pre-seeded for AI chatbot context)
+// ============================================================
+
+model Faq {
+  id         String      @id @default(uuid())
+  collegeId  String
+  question   String
+  answer     String
+  category   FaqCategory @default(GENERAL)
+  isActive   Boolean     @default(true)
+  viewCount  Int         @default(0)
+  helpful    Int         @default(0)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  college    College     @relation(fields: [collegeId], references: [id])
+
+  @@index([collegeId])
+  @@index([category])
+  @@map("faqs")
+}
+
+// ============================================================
+// CHAT SESSIONS
+// ============================================================
+
+model ChatSession {
+  id           String    @id @default(uuid())
+  userId       String
+  title        String    @default("New Chat")
+  isActive     Boolean   @default(true)
+  messageCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages     ChatMessage[]
+
+  @@index([userId])
+  @@map("chat_sessions")
+}
+
+// ============================================================
+// CHAT MESSAGES
+// ============================================================
+
+model ChatMessage {
+  id             String       @id @default(uuid())
+  sessionId      String
+  role           ChatRole
+  content        String
+  sources        Json         @default("[]")
+  tokensUsed     Int?
+  responseTimeMs Int?
+  feedback       FeedbackType @default(NONE)
+  createdAt      DateTime     @default(now())
+
+  session        ChatSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("chat_messages")
+}
+
+// ============================================================
+// DOCUMENTS (Enterprise Document Management)
+// ============================================================
+
+model Document {
+  id               String             @id @default(uuid())
+  collegeId        String
+  title            String
+  description      String?
+  category         DocumentCategory   @default(OTHER)
+  visibility       DocumentVisibility @default(ADMIN)
+  tags             String[]           @default([])
+  fileName         String             // UUID-based stored filename
+  originalFileName String             // User's original filename
+  filePath         String             // Full path in storage
+  mimeType         String             @default("application/pdf")
+  fileSize         Int                // Size in bytes
+  checksum         String             // SHA-256 hash for dedup/integrity
+  version          Int                @default(1)
+  status           DocumentStatus     @default(UPLOADED)
+  uploadedById     String
+  deletedAt        DateTime?          // Soft delete
+
+  // AI-ready metadata fields (populated in Phase 6B)
+  indexedAt         DateTime?
+  lastIndexedAt     DateTime?
+  embeddingStatus   EmbeddingStatus   @default(PENDING)
+  chunkCount        Int               @default(0)
+
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  college        College              @relation(fields: [collegeId], references: [id])
+  uploadedBy     User                 @relation(fields: [uploadedById], references: [id])
+  versions       DocumentVersion[]
+  auditLogs      DocumentAuditLog[]
+  chunks         DocumentChunk[]
+  processingJobs DocumentProcessingJob[]
+
+  @@index([collegeId])
+  @@index([category])
+  @@index([status])
+  @@index([checksum])
+  @@index([uploadedById])
+  @@index([visibility])
+  @@map("documents")
+}
+
+// ============================================================
+// DOCUMENT VERSIONS (Version History)
+// ============================================================
+
+model DocumentVersion {
+  id               String   @id @default(uuid())
+  documentId       String
+  version          Int
+  fileName         String
+  originalFileName String
+  filePath         String
+  fileSize         Int
+  checksum         String
+  uploadedById     String
+  createdAt        DateTime @default(now())
+
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  uploadedBy User     @relation("DocumentVersionUploader", fields: [uploadedById], references: [id])
+
+  @@index([documentId])
+  @@map("document_versions")
+}
+
+// ============================================================
+// DOCUMENT AUDIT LOG (Audit Trail)
+// ============================================================
+
+model DocumentAuditLog {
+  id         String   @id @default(uuid())
+  documentId String
+  userId     String
+  action     String   // UPLOADED, REPLACED, DELETED, RESTORED, DOWNLOADED, STATUS_CHANGED
+  details    Json     @default("{}")
+  version    Int?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User     @relation("DocumentAuditUser", fields: [userId], references: [id])
+
+  @@index([documentId])
+  @@index([userId])
+  @@index([action])
+  @@map("document_audit_logs")
+}
+
+// ============================================================
+// DOCUMENT PROCESSING JOBS (Future Async Processing)
+// ============================================================
+
+model DocumentProcessingJob {
+  id          String   @id @default(uuid())
+  documentId  String
+  jobType     String   // EXTRACT_TEXT, GENERATE_CHUNKS, GENERATE_EMBEDDINGS, REINDEX
+  status      String   @default("QUEUED") // QUEUED, RUNNING, COMPLETED, FAILED, CANCELLED
+  priority    Int      @default(0)
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(3)
+  errorMessage String?
+  result      Json     @default("{}")
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([status])
+  @@index([jobType])
+  @@map("document_processing_jobs")
+}
+
+// ============================================================
+// DOCUMENT CHUNKS (pgvector embeddings — populated in Phase 6B)
+// ============================================================
+
+model DocumentChunk {
+  id           String                     @id @default(uuid())
+  documentId   String
+  chunkIndex   Int
+  content      String
+  embedding    Unsupported("vector(768)")?
+  tokenCount   Int?
+  pageNumber   Int?
+  sectionTitle String?
+  heading      String?
+  metadata     Json                       @default("{}")
+  createdAt    DateTime                   @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@map("document_chunks")
+}
+
+// ============================================================
+// GUEST SESSIONS (Rate limiting for unauthenticated users)
+// ============================================================
+
+model GuestSession {
+  id          String   @id @default(uuid())
+  ipAddress   String   @unique
+  queryCount  Int      @default(0)
+  lastQueryAt DateTime @default(now())
+  resetAt     DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([ipAddress])
+  @@map("guest_sessions")
+}
